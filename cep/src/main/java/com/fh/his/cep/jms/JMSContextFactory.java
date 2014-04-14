@@ -36,10 +36,9 @@ public abstract class JMSContextFactory
 		return new JMSContext(factory, connection, session, destination);
 	}
 
-	@SuppressWarnings("unchecked")
 	private static ConnectionFactory getConnectionFactory(String ctxFactory, String url, String connectionFactoryName, String user, String pwd) throws NamingException
     {
-		Hashtable env = new Hashtable();
+		Hashtable<String, String> env = new Hashtable();
 		env.put(Context.INITIAL_CONTEXT_FACTORY, ctxFactory);
 		env.put(Context.PROVIDER_URL, url);
 		env.put(Context.SECURITY_PRINCIPAL, user);

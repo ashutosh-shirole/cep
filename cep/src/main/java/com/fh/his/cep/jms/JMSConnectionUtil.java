@@ -8,99 +8,103 @@
  **************************************************************************************/
 package com.fh.his.cep.jms;
 
-import com.espertech.esper.example.servershell.ServerShellConstants;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.MessageConsumer;
+import javax.jms.MessageListener;
+import javax.jms.MessageProducer;
+import javax.jms.ObjectMessage;
+import javax.naming.NamingException;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-
-import javax.jms.BytesMessage;
-import javax.jms.DeliveryMode;
-import javax.jms.MessageProducer;
-import javax.management.MBeanServerConnection;
-import javax.management.MBeanServerInvocationHandler;
-import javax.management.ObjectName;
-import javax.management.remote.JMXConnector;
-import javax.management.remote.JMXConnectorFactory;
-import javax.management.remote.JMXServiceURL;
-import java.io.InputStream;
-import java.text.NumberFormat;
-import java.util.Properties;
-import java.util.Random;
 
 public class JMSConnectionUtil
 {
     private static Log log = LogFactory.getLog(JMSConnectionUtil.class);
+    private static Properties properties = new Properties();
+    private static JMSContext jmsCtx;
 
-
-    public JMSConnectionUtil() throws Exception
+    static
     {
         log.info("Loading properties");
-        Properties properties = new Properties();
-        InputStream propertiesIS = ServerShellClientMain.class.getClassLoader().getResourceAsStream(ServerShellConstants.CONFIG_FILENAME);
-        if (propertiesIS == null)
-        {
-            throw new RuntimeException("Properties file '" + ServerShellConstants.CONFIG_FILENAME + "' not found in classpath");
-        }
-        properties.load(propertiesIS);
+        try {
+			InputStream propertiesIS = JMSConnectionUtil.class.getClassLoader().getResourceAsStream(JMSConstants.CONFIG_FILENAME);
+			if (propertiesIS == null)
+			{
+			    throw new RuntimeException("Properties file '" + JMSConstants.CONFIG_FILENAME + "' not found in classpath");
+			}
+			properties.load(propertiesIS);
+		} catch (IOException e) {
+			log.error(e);
+			e.printStackTrace();
+		}
 
-        // Attached via JMX to running server
-        log.info("Attach to server via JMX");
-        JMXServiceURL url = new JMXServiceURL(properties.getProperty(ServerShellConstants.MGMT_SERVICE_URL));
-        JMXConnector jmxc = JMXConnectorFactory.connect(url, null);
-        MBeanServerConnection mbsc = jmxc.getMBeanServerConnection();
-        ObjectName mBeanName = new ObjectName(ServerShellConstants.MGMT_MBEAN_NAME);
-        EPServiceProviderJMXMBean proxy = (EPServiceProviderJMXMBean) MBeanServerInvocationHandler.newProxyInstance(
-                     mbsc, mBeanName, EPServiceProviderJMXMBean.class, true);
+    }
+    
+    public static void sendEvent(Map<String, Object> msg, String destination) {
+    	 // Connect to JMS
+    	log.info("Connecting to JMS server");
+        try {
+			String factory = properties.getProperty(JMSConstants.JMS_CONTEXT_FACTORY);
+			String jmsurl = properties.getProperty(JMSConstants.JMS_PROVIDER_URL);
+			String connFactoryName = properties.getProperty(JMSConstants.JMS_CONNECTION_FACTORY_NAME);
+			String user = properties.getProperty(JMSConstants.JMS_USERNAME);
+			String password = properties.getProperty(JMSConstants.JMS_PASSWORD);
+			boolean isTopic = true;
+			JMSContext jmsCtx = JMSContextFactory.createContext(factory, jmsurl, connFactoryName, user, password, destination, isTopic);
+			// Get producer
+	        jmsCtx.getConnection().start();
+	        MessageProducer producer = jmsCtx.getSession().createProducer(jmsCtx.getDestination());
+	        ObjectMessage oMsg = jmsCtx.getSession().createObjectMessage((Serializable) msg);
+	        producer.send(oMsg);
+	        jmsCtx.destroy();
+		} catch (JMSException e) {
+			e.printStackTrace();
+			log.error(e);
+		} catch (NamingException e) {
+			e.printStackTrace();
+			log.error(e);
+		}
+    }
+    
+    public static void recieveEvent(String destination, MessageListener[] listeners) {
+    	try {
+			String factory = properties.getProperty(JMSConstants.JMS_CONTEXT_FACTORY);
+			String jmsurl = properties.getProperty(JMSConstants.JMS_PROVIDER_URL);
+			String connFactoryName = properties.getProperty(JMSConstants.JMS_CONNECTION_FACTORY_NAME);
+			String user = properties.getProperty(JMSConstants.JMS_USERNAME);
+			String password = properties.getProperty(JMSConstants.JMS_PASSWORD);
+			boolean isTopic = true;
+			jmsCtx = JMSContextFactory.createContext(factory, jmsurl, connFactoryName, user, password, destination, isTopic);
 
-        // Connect to JMS
-        log.info("Connecting to JMS server");
-        String factory = properties.getProperty(ServerShellConstants.JMS_CONTEXT_FACTORY);
-        String jmsurl = properties.getProperty(ServerShellConstants.JMS_PROVIDER_URL);
-        String connFactoryName = properties.getProperty(ServerShellConstants.JMS_CONNECTION_FACTORY_NAME);
-        String user = properties.getProperty(ServerShellConstants.JMS_USERNAME);
-        String password = properties.getProperty(ServerShellConstants.JMS_PASSWORD);
-        String destination = properties.getProperty(ServerShellConstants.JMS_INCOMING_DESTINATION);
-        boolean isTopic = Boolean.parseBoolean(properties.getProperty(ServerShellConstants.JMS_IS_TOPIC));
-        JMSContext jmsCtx = JMSContextFactory.createContext(factory, jmsurl, connFactoryName, user, password, destination, isTopic);
-
-        // Create statement via JMX
-        log.info("Creating a statement via Java Management Extensions (JMX) MBean Proxy");
-        proxy.createEPL("select * from SampleEvent where duration > 9.9", "filterStatement", new ClientSideUpdateListener());
-
-        // Get producer
-        jmsCtx.getConnection().start();
-        MessageProducer producer = jmsCtx.getSession().createProducer(jmsCtx.getDestination());
-
-        Random random = new Random();
-        String[] ipAddresses = {"127.0.1.0", "127.0.2.0", "127.0.3.0", "127.0.4.0"};
-        NumberFormat format = NumberFormat.getInstance();
-
-        // Send messages
-        for (int i = 0; i < 1000; i++)
-        {
-            String ipAddress = ipAddresses[random.nextInt(ipAddresses.length)];
-            double duration = 10 * random.nextDouble();
-            String durationStr = format.format(duration);
-            String payload = ipAddress + "," + durationStr;
-
-            BytesMessage bytesMessage = jmsCtx.getSession().createBytesMessage();
-            bytesMessage.writeBytes(payload.getBytes());
-            bytesMessage.setJMSDeliveryMode(DeliveryMode.NON_PERSISTENT);
-            producer.send(bytesMessage);
-
-            if (i % 100 == 0)
-            {
-                log.info("Sent " + i + " messages");
-            }
-        }
-
-        // Create statement via JMX
-        log.info("Destroing statement via Java Management Extensions (JMX) MBean Proxy");
-        proxy.destroy("filterStatement");
-
-        log.info("Shutting down JMS client connection");
-        jmsCtx.destroy();
-
-        log.info("Exiting");
-        System.exit(-1);
+	        for (MessageListener listener : listeners)
+	        {
+	            MessageConsumer consumer = jmsCtx.getSession().createConsumer(jmsCtx.getDestination());
+	            consumer.setMessageListener(listener);
+	        }
+	        jmsCtx.getConnection().start();
+		} catch (JMSException e) {
+			log.error(e);
+			e.printStackTrace();
+		} catch (NamingException e) {
+			log.error(e);
+			e.printStackTrace();
+		}
+    }
+    
+    public static void destroyContext() {
+    	try {
+			jmsCtx.destroy();
+		} catch (JMSException e) {
+			log.error(e);
+			e.printStackTrace();
+		}
     }
 }

@@ -36,5 +36,47 @@
 			<artifactId>activemq-all</artifactId>
 			<version>5.9.0</version>
 		</dependency>
+		<dependency>
+			<groupId>org.clojure</groupId>
+			<artifactId>clojure</artifactId>
+			<version>1.4.0</version>
+		</dependency>
 	</dependencies>
+	<build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<excludes><exclude>**/*.java</exclude></excludes>
+			</resource>
+		</resources>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-jar-plugin</artifactId>
+			  	<configuration>
+				  <archive>
+				    <manifestEntries>
+				      <Built-By>EsperTech</Built-By>
+				    </manifestEntries>
+				  </archive>
+				</configuration>
+			</plugin>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<configuration>
+					<source>1.6</source>
+					<target>1.6</target>
+				</configuration>
+			</plugin>			
+			<plugin>  
+				<groupId>org.codehaus.mojo</groupId>  
+				<artifactId>exec-maven-plugin</artifactId>  
+				<version>1.2.1</version>  
+				<configuration> 
+					<mainClass>com.fh.his.cep.App</mainClass>  
+				</configuration> 
+			</plugin>  
+		</plugins>
+	</build>
 </project>
